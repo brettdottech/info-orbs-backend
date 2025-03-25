@@ -1,12 +1,10 @@
 const express = require("express");
 const {
-    getClocks,
-    getClock,
-    addClock,
-    deleteClock,
-    increaseDownloadCounterClock
+    getClocks, getClock, addClock, deleteClock,
+    increaseDownloadCounterClock, approveClock, unapproveClock
 } = require("../controllers/clockController");
-const auth = require("../middleware/auth");
+// const {auth, extractTokenInfo} = require("../middleware/auth");
+const {auth} = require("../middleware/auth");
 const router = express.Router();
 
 // Allow auth and non-auth
@@ -33,9 +31,12 @@ router.get("/:id", (req, res, next) => {
 
 // Only auth
 router.post("/", auth, addClock);
-// Only auth
 router.delete("/:id", auth, deleteClock);
+router.post("/:id/approve", auth, approveClock);
+router.delete("/:id/approve", auth, unapproveClock);
+
 // Only non-auth
 router.post("/:id/dl", increaseDownloadCounterClock);
+
 
 module.exports = router;

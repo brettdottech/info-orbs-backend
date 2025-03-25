@@ -1,5 +1,6 @@
 const {Sequelize} = require("sequelize");
 const {Clock, Like} = require("../models/relations");
+const {hasRole, getUserNameById} = require("../middleware/auth");
 
 // A simple in-memory download tracker to avoid incrementing the clock download counter more
 // than once per day per IP
@@ -18,7 +19,19 @@ setInterval(() => {
 exports.getClocks = async (req, res) => {
     // console.log(req);
     try {
-        const clocks = await Clock.findAll({
+        let whereClause = {}
+        if (!hasRole(req, "admin")) {
+            // admin see everything
+            if (req.user?.id) {
+                // normal users see approved clocks and their own
+                whereClause = Sequelize.or({approved: true}, {userId: req.user.id})
+            } else {
+                // guest only see approved clocks
+                whereClause = Sequelize.or({approved: true})
+            }
+        }
+
+        let clocks = await Clock.findAll({
             attributes: {
                 include: [
                     [
@@ -35,11 +48,22 @@ exports.getClocks = async (req, res) => {
                     model: Like,
                     attributes: [],
                 }],
+            where: whereClause,
             group: ["Clock.id", "Clock.userId"], // Group by Clock ID and User ID to avoid duplicate results
             raw: true,
         });
 
-        console.log(clocks);
+        // console.log(clocks);
+
+        // Attach usernames to each clock
+        clocks = await Promise.all(
+            clocks.map(async (clock) => {
+                clock.userName = await getUserNameById(clock.userId, true); // Dynamically fetch missing names
+                console.log(`Clock ${clock.id} has username ${clock.userName}`);
+                return clock;
+            })
+        );
+
         if (req.user && req.user.id) {
             const likes = await Like.findAll({
                 where: {
@@ -71,6 +95,17 @@ exports.getClocks = async (req, res) => {
 
 exports.getClock = async (req, res) => {
     try {
+        let whereClause = {}
+        if (!hasRole(req, "admin")) {
+            // admin see everything
+            if (req.user?.id) {
+                // normal users see approved clocks and their own
+                whereClause = Sequelize.or({approved: true}, {userId: req.user.id})
+            } else {
+                // guest only see approved clocks
+                whereClause = Sequelize.or({approved: true})
+            }
+        }
         const clock = await Clock.findByPk(req.params.id, {
             attributes: {
                 include: [
@@ -88,9 +123,11 @@ exports.getClock = async (req, res) => {
                     model: Like,
                     attributes: [],
                 }],
+            where: whereClause,
             group: ["Clock.id", "Clock.userId"], // Group by Clock ID and User ID to avoid duplicate results
             raw: true,
         });
+        clock.userName = await getUserNameById(clock.userId, true);
         // console.log(req.user, req.user?.id);
         if (req.user && req.user.id) {
             const userLiked = await Like.count({
@@ -124,7 +161,7 @@ exports.addClock = async (req, res) => {
 exports.deleteClock = async (req, res) => {
     try {
         const clock = await Clock.findByPk(req.params.id);
-        if (!clock || (clock.userId !== req.user.id)) { //} && !req.user.is_admin)) {
+        if (!clock || (clock.userId !== req.user.id && !hasRole(req, "admin"))) {
             return res.status(403).json({msg: "Not authorized"});
         }
         await clock.destroy();
@@ -146,7 +183,7 @@ exports.updateClock = async (req, res) => {
             return res.status(404).json({msg: "Clock not found"});
         }
 
-        if (clock.userId !== req.user.id && !req.user.is_admin) {
+        if (clock.userId !== req.user.id && !hasRole(req, "admin")) {
             return res.status(403).json({msg: "Not authorized"});
         }
 
@@ -162,7 +199,45 @@ exports.updateClock = async (req, res) => {
     }
 };
 
-// TODO fix potential race condition by using a Mutex/Lock
+exports.approveClock = async (req, res) => {
+    const clockId = req.params.id;
+    try {
+        if (!hasRole(req, "admin")) {
+            return res.status(403).json({msg: "Not authorized"});
+        }
+        const clock = await Clock.findByPk(clockId);
+        if (!clock) {
+            return res.status(404).json({msg: "Clock not found"});
+        }
+        clock.approved = true;
+        clock.approvedBy = req.user.id;
+        await clock.save();
+        res.json(clock);
+    } catch (err) {
+        res.status(500).json({error: err});
+    }
+}
+
+exports.unapproveClock = async (req, res) => {
+    const clockId = req.params.id;
+    try {
+        if (!hasRole(req, "admin")) {
+            return res.status(403).json({msg: "Not authorized"});
+        }
+        const clock = await Clock.findByPk(clockId);
+        if (!clock) {
+            return res.status(404).json({msg: "Clock not found"});
+        }
+        clock.approved = false;
+        clock.approvedBy = null;
+
+        await clock.save();
+        res.json(clock);
+    } catch (err) {
+        res.status(500).json({error: err});
+    }
+}
+
 exports.increaseDownloadCounterClock = async (req, res) => {
     try {
         const clockId = req.params.id;

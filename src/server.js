@@ -13,15 +13,19 @@ app.use(express.json());
 app.use(cors());
 
 // app.use("/api/auth", require("./routes/auth"));
+console.log("Setting up clocks routes");
 app.use("/api/clocks", require("./routes/clocks"));
+console.log("Setting up likes routes");
 app.use("/api/likes", require("./routes/likes"));
+console.log("Setting up uploads routes");
 app.use("/api/uploads", require("./routes/uploads"));
+console.log("Setting up images routes");
 app.use("/api/images", require("./routes/images"));
 
 const connectWithRetry = async (retries = 5, delay = 5000) => {
     while (retries) {
         try {
-            await sequelize.sync();
+            await sequelize.sync({ alter: true });
             console.log("Database connected");
             break;
         } catch (err) {

@@ -10,6 +10,8 @@ const Clock = sequelize.define("Clock", {
     userId: {type: DataTypes.STRING, allowNull: false},
     downloads: {type: DataTypes.INTEGER, defaultValue: 0, allowNull: false},
     secondHandColor: {type: DataTypes.STRING, allowNull: false},
+    approved: {type: DataTypes.BOOLEAN, defaultValue: false, allowNull: false},
+    approvedBy: {type: DataTypes.STRING, allowNull: true},
 }, {timestamps: true});
 
 module.exports = Clock;

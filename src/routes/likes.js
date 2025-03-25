@@ -1,6 +1,6 @@
 const express = require("express");
 const {getLike, setLike, removeLike} = require("../controllers/likeController");
-const auth = require("../middleware/auth");
+const {auth} = require("../middleware/auth");
 const router = express.Router();
 
 router.get("/:clockId", auth, getLike);
